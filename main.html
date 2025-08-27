@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Treino de Ácidos e Bases</title>
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(to right, #89f7fe, #66a6ff);
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+.container {
+    max-width: 800px;
+    margin: 50px auto;
+    background: rgba(255,255,255,0.95);
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+h1, h2 {
+    text-align: center;
+    color: #1a1a1a;
+}
+input, button {
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    margin-top: 5px;
+}
+button {
+    background-color: #66a6ff;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+button:hover {
+    background-color: #89f7fe;
+}
+.feedback {
+    margin-top: 10px;
+    font-weight: bold;
+    text-align: center;
+}
+.footer {
+    text-align: center;
+    margin-top: 40px;
+    font-style: italic;
+    color: #555;
+}
+.form-section {
+    margin-top: 30px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>Treino de Ácidos e Bases</h1>
+
+<div class="form-section">
+<h2>Ácidos</h2>
+<p>Digite o nome do ácido:</p>
+<p>Ácido: <span id="formula_acido"></span></p>
+<input type="text" id="resposta_acido" placeholder="Digite o nome aqui">
+<button onclick="verificar('acido')">Verificar</button>
+<p class="feedback" id="feedback_acido"></p>
+</div>
+
+<div class="form-section">
+<h2>Bases</h2>
+<p>Digite o nome da base:</p>
+<p>Base: <span id="formula_base"></span></p>
+<input type="text" id="resposta_base" placeholder="Digite o nome aqui">
+<button onclick="verificar('base')">Verificar</button>
+<p class="feedback" id="feedback_base"></p>
+</div>
+
+<div class="footer">
+Made with love by J.FAHL
+</div>
+</div>
+
+<script>
+const acidos = {
+    "HNO2":"ácido nitroso",
+    "HNO3":"ácido nítrico",
+    "H2SO3":"ácido sulfuroso",
+    "H2SO4":"ácido sulfúrico",
+    "HClO":"ácido hipocloroso",
+    "HClO2":"ácido cloroso",
+    "HClO3":"ácido clórico",
+    "HClO4":"ácido perclórico",
+    "H3PO3":"ácido fosforoso",
+    "H3PO4":"ácido fosfórico",
+    "HBrO":"ácido hipobromoso",
+    "HBrO2":"ácido bromoso",
+    "HBrO3":"ácido brômico",
+    "HBrO4":"ácido perbrômico",
+    "HIO":"ácido hipoiodoso",
+    "HIO2":"ácido iodoso",
+    "HIO3":"ácido iódico",
+    "HIO4":"ácido periódico",
+    "HCl":"ácido clorídrico",
+    "HBr":"ácido bromídrico",
+    "HI":"ácido iodídrico",
+    "HF":"ácido fluorídrico",
+    "H2S":"ácido sulfídrico",
+    "HCN":"ácido cianídrico"
+};
+
+const bases = {
+    "NaOH":"hidróxido de sódio",
+    "KOH":"hidróxido de potássio",
+    "Ca(OH)2":"hidróxido de cálcio",
+    "Mg(OH)2":"hidróxido de magnésio",
+    "NH4OH":"hidróxido de amônio",
+    "Ba(OH)2":"hidróxido de bário"
+};
+
+let formulas_acido = Object.keys(acidos);
+let formulas_base = Object.keys(bases);
+let pool_acido = [...formulas_acido];
+let pool_base = [...formulas_base];
+let atual_acido;
+let atual_base;
+
+function novaFormula(tipo){
+    if(tipo==='acido'){
+        if(pool_acido.length===0){
+            document.getElementById('formula_acido').textContent = "Todos acertados!";
+            return;
+        }
+        let idx = Math.floor(Math.random()*pool_acido.length);
+        atual_acido = pool_acido.splice(idx,1)[0];
+        document.getElementById('formula_acido').textContent = atual_acido;
+        document.getElementById('resposta_acido').value = '';
+        document.getElementById('feedback_acido').textContent = '';
+    } else {
+        if(pool_base.length===0){
+            document.getElementById('formula_base').textContent = "Todos acertados!";
+            return;
+        }
+        let idx = Math.floor(Math.random()*pool_base.length);
+        atual_base = pool_base.splice(idx,1)[0];
+        document.getElementById('formula_base').textContent = atual_base;
+        document.getElementById('resposta_base').value = '';
+        document.getElementById('feedback_base').textContent = '';
+    }
+}
+
+function verificar(tipo){
+    let resposta, correta, feedbackId;
+    if(tipo==='acido'){
+        resposta = document.getElementById('resposta_acido').value.trim().toLowerCase();
+        correta = acidos[atual_acido].toLowerCase();
+        feedbackId = 'feedback_acido';
+    } else {
+        resposta = document.getElementById('resposta_base').value.trim().toLowerCase();
+        correta = bases[atual_base].toLowerCase();
+        feedbackId = 'feedback_base';
+    }
+
+    if(resposta === correta){
+        document.getElementById(feedbackId).textContent = "✅ Correto!";
+    } else {
+        document.getElementById(feedbackId).textContent = "❌ Errado! O correto é: "+(tipo==='acido'?acidos[atual_acido]:bases[atual_base]);
+    }
+
+    setTimeout(()=>novaFormula(tipo),1500);
+}
+
+// Inicializa
+novaFormula('acido');
+novaFormula('base');
+</script>
+
+</body>
+</html>
