@@ -2,180 +2,915 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Treino de Ácidos e Bases</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Envio de G-code — Dois Carros / Trilho 2020</title>
 <style>
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(to right, #89f7fe, #66a6ff);
-    color: #333;
-    margin: 0;
-    padding: 0;
-}
-.container {
-    max-width: 800px;
-    margin: 50px auto;
-    background: rgba(255,255,255,0.95);
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-}
-h1, h2 {
-    text-align: center;
-    color: #1a1a1a;
-}
-input, button {
-    padding: 10px;
-    font-size: 16px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
-    margin-top: 5px;
-}
-button {
-    background-color: #66a6ff;
-    color: white;
-    border: none;
-    cursor: pointer;
-}
-button:hover {
-    background-color: #89f7fe;
-}
-.feedback {
-    margin-top: 10px;
-    font-weight: bold;
-    text-align: center;
-}
-.footer {
-    text-align: center;
-    margin-top: 40px;
-    font-style: italic;
-    color: #555;
-}
-.form-section {
-    margin-top: 30px;
-}
+  :root{
+    --bg:#12151A; --panel:#1B2027; --panel-2:#212832; --line:#2B333D;
+    --text:#E9E7E2; --muted:#8B939C;
+    --orange:#FF7A29; --orange-dim:#7A3F19;
+    --cyan:#39D6B0; --cyan-dim:#1B5E4E;
+    --warn:#FFC24B; --danger:#FF5C5C; --ok:#4ADE80;
+    --cartx:#3B82F6; --cartx-dim:#1E3A66; --carty:#EF4444; --carty-dim:#6B1F1F;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --disp:'Bahnschrift','Oswald','Arial Narrow',sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:14px;}
+  header.top{
+    padding:14px 24px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+    background:linear-gradient(180deg,#161B21,#12151A);
+    position:sticky; top:0; z-index:20;
+  }
+  header.top h1{font-family:var(--disp); font-weight:700; letter-spacing:.5px; font-size:20px; margin:0; text-transform:uppercase;}
+  header.top h1 span{color:var(--orange);}
+  header.top .tag{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; border:1px solid var(--line); padding:3px 8px; border-radius:2px;}
+  .layout{display:flex; flex-direction:column; gap:16px; padding:16px;}
+
+  section.card{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 16px;}
+  section.card h2{font-family:var(--disp); text-transform:uppercase; font-size:13px; letter-spacing:1px; margin:0 0 10px 0; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  section.card h2 .sub{font-size:11px; color:var(--muted); text-transform:none; letter-spacing:0; font-weight:400;}
+
+  /* Simulação: fica no topo ocupando quase toda a altura da tela; o resto
+     do conteúdo fica abaixo e exige rolar para ser acessado. */
+  section.card.sim-hero{
+    display:flex; flex-direction:column;
+    min-height:calc(100vh - 88px);
+  }
+
+  textarea, input, select{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    padding:7px 9px; border-radius:3px; font-size:13px; font-family:inherit;
+  }
+  textarea:focus, input:focus, select:focus{outline:2px solid var(--orange); outline-offset:1px;}
+  textarea#gcodeInput{height:280px; font-family:var(--mono); font-size:12.5px; color:var(--cyan); background:#0D0F12; line-height:1.55; resize:vertical;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  label.field{display:block; margin:6px 0;}
+  label.field span.lbl{display:block; font-size:11px; color:var(--muted); margin-bottom:3px;}
+  .hint{font-size:11px; color:var(--muted); line-height:1.4; margin:6px 0 0 0;}
+
+  button{
+    font-family:inherit; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.4px;
+    background:var(--panel-2); color:var(--text); border:1px solid var(--line);
+    padding:7px 12px; border-radius:3px; cursor:pointer;
+  }
+  button:hover{border-color:var(--orange); color:var(--orange);}
+  button.primary{background:var(--orange); color:#1A0E05; border-color:var(--orange);}
+  button.primary:hover{background:#FF8B49; color:#1A0E05;}
+  button.danger{background:transparent;}
+  button.danger:hover{border-color:var(--danger); color:var(--danger);}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  input[type=file]{display:none;}
+
+  canvas#railCanvas{width:100%; flex:1 1 auto; min-height:280px; display:block; background:#0D0F12; border-radius:4px; border:1px solid var(--line);}
+  .legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px;}
+
+  .status-dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--danger); margin-right:6px;}
+  .status-dot.on{background:var(--ok);}
+  #serialLog{
+    height:220px; overflow-y:auto; background:#0D0F12; border:1px solid var(--line); border-radius:4px;
+    padding:8px 10px; font-family:var(--mono); font-size:11.5px; line-height:1.5; white-space:pre-wrap;
+  }
+  #serialLog .in{color:var(--muted);}
+  #serialLog .out{color:var(--orange);}
+  #serialLog .sys{color:var(--warn);}
+  .warn-banner{
+    background:#2A2110; border:1px solid var(--warn); color:var(--warn); border-radius:4px;
+    padding:8px 10px; font-size:12px; margin-bottom:10px; display:none;
+  }
+  .warn-banner.show{display:block;}
+  .readout{
+    background:var(--panel-2); border:1px dashed var(--line); border-radius:3px;
+    padding:7px 9px; font-family:var(--mono); font-size:12px; color:var(--cyan); line-height:1.4;
+  }
+  .readout b{color:var(--text);}
 </style>
 </head>
 <body>
 
-<div class="container">
-<h1>Treino de Ácidos e Bases</h1>
+<header class="top">
+  <h1>Envio de <span>G-code</span></h1>
+  <span class="tag">Dois carros · X/Y lineares · Z/E manoplas</span>
+</header>
 
-<div class="form-section">
-<h2>Ácidos</h2>
-<p>Digite o nome do ácido:</p>
-<p>Ácido: <span id="formula_acido"></span></p>
-<input type="text" id="resposta_acido" placeholder="Digite o nome aqui">
-<button onclick="verificar('acido')">Verificar</button>
-<p class="feedback" id="feedback_acido"></p>
-</div>
+<div class="layout">
 
-<div class="form-section">
-<h2>Bases</h2>
-<p>Digite o nome da base:</p>
-<p>Base: <span id="formula_base"></span></p>
-<input type="text" id="resposta_base" placeholder="Digite o nome aqui">
-<button onclick="verificar('base')">Verificar</button>
-<p class="feedback" id="feedback_base"></p>
-</div>
+  <!-- SIMULACAO — fica no topo, ocupando a maior parte da tela -->
+  <section class="card sim-hero">
+    <h2>Simulação <span class="sub">pré-visualização local, não afeta o envio</span></h2>
+    <canvas id="railCanvas" width="900" height="260"></canvas>
+    <div class="row">
+      <label class="field" style="flex:1; min-width:140px;"><span class="lbl">Faixa de visualização (± mm a partir do zero)</span>
+        <input type="number" id="viewRange" value="200" min="10"></label>
+      <label class="field" style="flex:1; min-width:140px;"><span class="lbl">Limite de acoplamento (mm)</span>
+        <input type="number" id="couplingThreshold" value="5" min="0"></label>
+      <div style="display:flex; align-items:flex-end; gap:8px;">
+        <button id="btnSimulate">Simular</button>
+        <button id="btnPlay" disabled>▶ Reproduzir</button>
+        <button id="btnResetSim" class="danger">Reiniciar</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="field" style="flex:1; min-width:180px;"><span class="lbl">Passos por volta do motor (com microstepping)</span>
+        <input type="number" id="stepsPerRev" value="3200" min="1"></label>
+      <label class="field" style="flex:1; min-width:180px;"><span class="lbl">M92 — passos por unidade de Z/E (do seu G-code)</span>
+        <input type="number" id="m92StepsPerUnit" value="1000" min="0.001" step="any"></label>
+      <div class="readout" id="degPerUnitReadout" style="flex:1; min-width:180px; align-self:flex-end;"></div>
+    </div>
+    <p class="hint">
+      <span class="legend-dot" style="background:var(--cartx)"></span>Carro X — manopla Z (motor rotativo azul)&nbsp;&nbsp;
+      <span class="legend-dot" style="background:var(--carty)"></span>Carro Y — manopla E (motor rotativo vermelho)&nbsp;&nbsp;
+      <br>Referência: X=0 → azul em -40 mm; Y=0 → vermelho em +40 mm. Movimento positivo aproxima do centro.
+      <br>A manopla gira com duas garras (como na peça de referência) e mostra ângulo + RPM em tempo real acima de cada motor.
+      <br>A velocidade real do giro depende de "passos por volta" × M92 — ajuste os dois campos acima para bater com a rotação de verdade da máquina.
+      <br>Marque "Sincronizar" na seção de Conexão para ver aqui, em tempo real, o que a máquina está executando durante o envio.
+    </p>
+    <div class="warn-banner" id="simWarnBox"></div>
+  </section>
 
-<div class="footer">
-Made with love by J.FAHL
-</div>
+  <!-- G-CODE (fornecido pelo usuário, não gerado) -->
+  <section class="card">
+    <h2>G-code <span class="sub">cole ou carregue o arquivo — nada aqui é gerado automaticamente</span></h2>
+    <div class="row">
+      <button id="btnLoadFile">Carregar arquivo .gcode</button>
+      <input type="file" id="fileInput" accept=".gcode,.nc,.txt">
+      <button id="btnExample" class="danger">Carregar exemplo</button>
+      <button id="btnClear" class="danger">Limpar</button>
+    </div>
+    <textarea id="gcodeInput" placeholder="Cole aqui o seu G-code (X = carro 1, Y = carro 2, Z = motor da manopla do carro X, E = motor da manopla do carro Y)"></textarea>
+    <p class="hint" id="lineCount">0 linhas</p>
+  </section>
+
+  <!-- CONEXAO E ENVIO -->
+  <section class="card">
+    <h2>Conexão com a máquina <span class="sub">Web Serial — Chrome/Edge, aberto localmente (fora de iframe)</span></h2>
+    <div class="row2">
+      <div>
+        <div class="row">
+          <label class="field" style="flex:1;"><span class="lbl">Baud rate</span>
+            <select id="baudRate">
+              <option>9600</option><option>57600</option><option selected>115200</option><option>250000</option>
+            </select></label>
+          <label class="field" style="flex:1;"><span class="lbl">Modo de envio</span>
+            <select id="sendMode">
+              <option value="ok">Aguardar "ok" da máquina</option>
+              <option value="delay">Intervalo fixo entre linhas</option>
+            </select></label>
+          <label class="field" style="flex:1;"><span class="lbl">Intervalo fixo (ms)</span>
+            <input type="number" id="fixedDelay" value="100" min="0"></label>
+        </div>
+        <div class="row">
+          <button id="btnConnect" class="primary">Conectar</button>
+          <button id="btnDisconnect" class="danger" disabled>Desconectar</button>
+          <span style="align-self:center; font-size:12px; color:var(--muted);">
+            <span class="status-dot" id="statusDot"></span><span id="statusText">Desconectado</span>
+          </span>
+        </div>
+        <div class="row">
+          <button id="btnSend" class="primary" disabled>Enviar G-code</button>
+          <button id="btnStop" class="danger" disabled>Parar envio</button>
+          <button id="btnSendLine" disabled>Enviar linha manual →</button>
+          <input type="text" id="manualLine" placeholder="ex.: G1 X10 F1000" style="flex:1; min-width:160px;">
+        </div>
+        <label class="chk"><input type="checkbox" id="syncSim" checked> Sincronizar a simulação com o envio (ver em tempo real o que a máquina está fazendo)</label>
+        <label class="chk"><input type="checkbox" id="waitM400" checked> Aguardar fim real do movimento (M400) — recomendado p/ Marlin original (Ender 3)</label>
+        <label class="field"><span class="lbl">Timeout do M400 (ms) — aumente se algum movimento for lento (ex.: eixos limitados pelo M203)</span>
+          <input type="number" id="m400Timeout" value="120000" min="1000" step="1000"></label>
+        <p class="hint">
+          No Marlin original, o "ok" é enviado quando o comando entra na fila, não quando o movimento termina fisicamente.
+          Com M400 marcado, cada linha de movimento é seguida de um <code>M400</code> e só avançamos para a próxima quando ele
+          responde — garante que a simulação acompanhe o tempo real da máquina, mas os movimentos deixam de se mesclar
+          suavemente entre si (cada um para antes do próximo começar).
+        </p>
+        <p class="hint" id="serialSupportNote"></p>
+      </div>
+      <div>
+        <div id="serialLog"></div>
+      </div>
+    </div>
+  </section>
+
 </div>
 
 <script>
-const acidos = {
-    "HNO2":"ácido nitroso",
-    "HNO3":"ácido nítrico",
-    "H2SO3":"ácido sulfuroso",
-    "H2SO4":"ácido sulfúrico",
-    "HClO":"ácido hipocloroso",
-    "HClO2":"ácido cloroso",
-    "HClO3":"ácido clórico",
-    "HClO4":"ácido perclórico",
-    "H3PO3":"ácido fosforoso",
-    "H3PO4":"ácido fosfórico",
-    "HBrO":"ácido hipobromoso",
-    "HBrO2":"ácido bromoso",
-    "HBrO3":"ácido brômico",
-    "HBrO4":"ácido perbrômico",
-    "HIO":"ácido hipoiodoso",
-    "HIO2":"ácido iodoso",
-    "HIO3":"ácido iódico",
-    "HIO4":"ácido periódico",
-    "HCl":"ácido clorídrico",
-    "HBr":"ácido bromídrico",
-    "HI":"ácido iodídrico",
-    "HF":"ácido fluorídrico",
-    "H2S":"ácido sulfídrico",
-    "HCN":"ácido cianídrico"
-};
+(function(){
+  "use strict";
+  function byId(id){ return document.getElementById(id); }
 
-const bases = {
-    "NaOH":"hidróxido de sódio",
-    "KOH":"hidróxido de potássio",
-    "Ca(OH)2":"hidróxido de cálcio",
-    "Mg(OH)2":"hidróxido de magnésio",
-    "NH4OH":"hidróxido de amônio",
-    "Ba(OH)2":"hidróxido de bário"
-};
+  // =========================================================
+  // G-CODE INPUT
+  // =========================================================
+  var gcodeInput = byId('gcodeInput');
+  var EXAMPLE = "G91\nM302 P1\nM211 S0\nM92 Z1000 E1000\nM203 X500 Y500 Z80 E80\n" +
+    "G1 X-40 Y-40 Z10 E10 F5200\nG1 X40 Y40 Z10 E10 F5200\nG1 X-40 Y-40 Z10 E10 F5200\n" +
+    "G1 X40 Y40 Z10 E10 F5200\nG1 X-40 Y40 Z10 E10 F3000\nG1 X80 Y-80 Z10 E10 F4000\n" +
+    "G1 X-80 F10000\nG1 E40 F1000\nG1 E40 Z40 F1000\nG1 X80 E45 Z45 F2000\n" +
+    "G1 X-80 Y80 E10 Z10 F8000\nG1 Y-80 F10000\nG1 Z40 F1000\nG1 Z40 E40 F1000\n" +
+    "G1 Y80 E55 Z55 F2000\nG1 X40 Y-40 E10 Z10 F4000\n";
 
-let formulas_acido = Object.keys(acidos);
-let formulas_base = Object.keys(bases);
-let pool_acido = [...formulas_acido];
-let pool_base = [...formulas_base];
-let atual_acido;
-let atual_base;
+  function updateLineCount(){
+    var n = gcodeInput.value.split('\n').filter(function(l){return l.trim().length;}).length;
+    byId('lineCount').textContent = n + ' linhas';
+  }
+  gcodeInput.addEventListener('input', updateLineCount);
 
-function novaFormula(tipo){
-    if(tipo==='acido'){
-        if(pool_acido.length===0){
-            document.getElementById('formula_acido').textContent = "Todos acertados!";
-            return;
+  byId('btnExample').addEventListener('click', function(){
+    gcodeInput.value = EXAMPLE; updateLineCount();
+    autoDetectM92(EXAMPLE);
+  });
+  byId('btnClear').addEventListener('click', function(){
+    gcodeInput.value = ''; updateLineCount();
+  });
+  byId('btnLoadFile').addEventListener('click', function(){ byId('fileInput').click(); });
+  byId('fileInput').addEventListener('change', function(e){
+    var f = e.target.files[0]; if(!f) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){ gcodeInput.value = ev.target.result; updateLineCount(); };
+    reader.readAsText(f);
+  });
+
+  // =========================================================
+  // SIMULACAO (parser simples do g-code fornecido)
+  // =========================================================
+
+  // Interpreta UMA linha de G-code, atualizando "state" (posição/modo/feed)
+  // in-place. Retorna null para linhas sem efeito na posição (comentário,
+  // M-code, G90/G91/G92) ou {durationMs, snapshot} para G1/G0/G4.
+  // Usada tanto pela simulação offline (parseGcode) quanto pelo envio
+  // sincronizado, para garantir que as duas calculem exatamente a mesma coisa.
+  function stepGcodeLine(rawLine, state){
+    var line = rawLine.split(';')[0].trim();
+    if(!line) return null;
+    var tokens = line.split(/\s+/);
+    var cmd = tokens[0].toUpperCase();
+
+    if(cmd === 'G90'){ state.absolute = true; return null; }
+    if(cmd === 'G91'){ state.absolute = false; return null; }
+    if(cmd === 'G92'){
+      tokens.slice(1).forEach(function(tok){
+        var l = tok[0].toUpperCase(), v = parseFloat(tok.slice(1));
+        if('XYZE'.indexOf(l) >= 0 && !isNaN(v)) state[l] = v;
+      });
+      return null;
+    }
+    if(cmd === 'G1' || cmd === 'G0'){
+      var newPos = {X:state.X,Y:state.Y,Z:state.Z,E:state.E};
+      tokens.slice(1).forEach(function(tok){
+        var l = tok[0].toUpperCase(), v = parseFloat(tok.slice(1));
+        if(isNaN(v)) return;
+        if(l === 'F'){ state.feed = v; return; }
+        if('XYZE'.indexOf(l) >= 0){
+          newPos[l] = state.absolute ? v : state[l] + v;
         }
-        let idx = Math.floor(Math.random()*pool_acido.length);
-        atual_acido = pool_acido.splice(idx,1)[0];
-        document.getElementById('formula_acido').textContent = atual_acido;
-        document.getElementById('resposta_acido').value = '';
-        document.getElementById('feedback_acido').textContent = '';
-    } else {
-        if(pool_base.length===0){
-            document.getElementById('formula_base').textContent = "Todos acertados!";
-            return;
+      });
+      var dX=newPos.X-state.X, dY=newPos.Y-state.Y, dZ=newPos.Z-state.Z, dE=newPos.E-state.E;
+      var maxDisp = Math.max(Math.abs(dX),Math.abs(dY),Math.abs(dZ),Math.abs(dE));
+      var ms = state.feed>0 ? (maxDisp/state.feed)*60000 : 0;
+      state.X=newPos.X; state.Y=newPos.Y; state.Z=newPos.Z; state.E=newPos.E;
+      return { durationMs: ms, snapshot:{X:state.X,Y:state.Y,Z:state.Z,E:state.E} };
+    }
+    if(cmd === 'G4'){
+      var ms2 = 0;
+      tokens.slice(1).forEach(function(tok){
+        var l = tok[0].toUpperCase(), v = parseFloat(tok.slice(1));
+        if(isNaN(v)) return;
+        if(l === 'P') ms2 = v;
+        if(l === 'S') ms2 = v*1000;
+      });
+      return { durationMs: ms2, snapshot:{X:state.X,Y:state.Y,Z:state.Z,E:state.E} };
+    }
+    // M92, M203, M302, M211 e outros M-codes: ignorados na simulação de posição
+    return null;
+  }
+
+  function newGcodeState(){
+    return { absolute:true, X:0, Y:0, Z:0, E:0, feed:1000 };
+  }
+
+  function parseGcode(text){
+    var lines = text.split('\n');
+    var state = newGcodeState();
+    var timeline = [{t:0, X:0,Y:0,Z:0,E:0}];
+    var totalMs = 0;
+
+    lines.forEach(function(raw){
+      var res = stepGcodeLine(raw, state);
+      if(res){
+        totalMs += res.durationMs;
+        timeline.push({t:totalMs, X:res.snapshot.X, Y:res.snapshot.Y, Z:res.snapshot.Z, E:res.snapshot.E});
+      }
+    });
+
+    return {timeline: timeline, totalMs: totalMs, warnings: []};
+  }
+
+  var canvas = byId('railCanvas');
+  var ctx = canvas.getContext('2d');
+  var simResult = null;
+  var animPlaying = false, animStart = 0;
+
+  function fitCanvas(){
+    var ratio = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || 900;
+    var h = canvas.clientHeight || 260;
+    canvas.width = w*ratio; canvas.height = h*ratio;
+    ctx.setTransform(ratio,0,0,ratio,0,0);
+  }
+  window.addEventListener('resize', fitCanvas);
+
+  function roundRectPath(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+  function niceStep(range){
+    if(range<=30) return 5;
+    if(range<=80) return 10;
+    if(range<=200) return 20;
+    if(range<=500) return 50;
+    return 100;
+  }
+  function drawLeg(x, topY, h){
+    ctx.fillStyle = '#2B333D'; ctx.strokeStyle = '#454C55'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x-15, topY); ctx.lineTo(x+15, topY);
+    ctx.lineTo(x+24, topY+h); ctx.lineTo(x-24, topY+h);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return [(num>>16)&255, (num>>8)&255, num&255];
+  }
+  function shade(hex, amt){
+    var c = hexToRgb(hex);
+    var r=Math.min(255,Math.max(0,c[0]+amt)), g=Math.min(255,Math.max(0,c[1]+amt)), b=Math.min(255,Math.max(0,c[2]+amt));
+    return 'rgb('+r+','+g+','+b+')';
+  }
+  function shadeAlpha(hex, amt, alpha){
+    var c = hexToRgb(hex);
+    var r=Math.min(255,Math.max(0,c[0]+amt)), g=Math.min(255,Math.max(0,c[1]+amt)), b=Math.min(255,Math.max(0,c[2]+amt));
+    return 'rgba('+r+','+g+','+b+','+alpha+')';
+  }
+
+  // Desenha um carro na vista lateral: carro/base sobre o trilho, motor linear
+  // (parte de baixo), coluna, motor rotativo (parte de cima) e o acoplador
+  // colorido que se projeta em direção ao centro. rotDeg anima o giro da manopla.
+  // Todas as peças são definidas em mm e escaladas por pxPerMm — assim o
+  // conjunto guarda a proporção real em relação ao trilho (motor NEMA17 ≈
+  // 42mm) e não estica nem fica pequeno demais ao redimensionar a janela.
+  function drawCartAssembly(cx, railY, rotDeg, rpm, color, colorDim, pointsRight, pxPerMm){
+    var dir = pointsRight ? 1 : -1;
+    var mm = function(v){ return v * pxPerMm; };
+
+    // carro (bloco cinza) apoiado sobre o trilho
+    var baseW = mm(46), baseH = mm(22);
+    var baseY = railY - baseH/2;
+    ctx.fillStyle = '#4B535C'; ctx.strokeStyle = '#5B636C'; ctx.lineWidth = 1;
+    roundRectPath(cx-baseW/2, baseY, baseW, baseH, 4); ctx.fill(); ctx.stroke();
+
+    // motor linear (embaixo, corpo preto pendendo do carro) — NEMA17 (~42mm)
+    var linW = mm(30), linH = mm(40);
+    var linY = baseY + baseH - mm(4);
+    ctx.fillStyle = '#15181C'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+    roundRectPath(cx-linW/2, linY, linW, linH, 3); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#33383E'; ctx.lineWidth = 1;
+    for(var ly=linY+mm(6); ly<linY+linH-mm(4); ly+=mm(6)){
+      ctx.beginPath(); ctx.moveTo(cx-linW/2+mm(3), ly); ctx.lineTo(cx+linW/2-mm(3), ly); ctx.stroke();
+    }
+
+    // coluna que sobe do carro até o suporte do motor rotativo
+    var postW = mm(6), postH = mm(16);
+    var postY = baseY - postH;
+    ctx.fillStyle = '#333B44';
+    ctx.fillRect(cx-postW/2, postY, postW, postH);
+
+    // suporte (chapa) do motor rotativo
+    var plateW = mm(50), plateH = mm(5);
+    ctx.fillStyle = '#5B636C';
+    ctx.fillRect(cx-plateW/2, postY-plateH, plateW, plateH);
+
+    // motor rotativo (corpo preto, horizontal, no topo) — NEMA17: 42x42mm
+    var MOTOR_W_MM = 42, MOTOR_H_MM = 42;
+    var motW = mm(MOTOR_W_MM), motH = mm(MOTOR_H_MM);
+    var motY = postY - plateH - motH;
+    ctx.fillStyle = '#15181C'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+    roundRectPath(cx-motW/2, motY, motW, motH, 3); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#33383E'; ctx.lineWidth = 1;
+    for(var mx2=cx-motW/2+mm(5); mx2<cx+motW/2-mm(3); mx2+=mm(5)){
+      ctx.beginPath(); ctx.moveTo(mx2, motY+mm(4)); ctx.lineTo(mx2, motY+motH-mm(4)); ctx.stroke();
+    }
+
+    // Eixo + manopla, também em mm. O alcance total (metade do motor + o
+    // eixo/acoplador) é calibrado para exatamente 40mm — a mesma distância
+    // do centro do carro até o centro do trilho na posição de referência —
+    // então as duas manoplas se tocam de verdade em X=0 / Y=0.
+    var shaftY = motY + motH/2;
+    var shaftStart = cx + dir*(motW/2);
+    var REACH_TOTAL_MM = 40;
+    var reachMm = REACH_TOTAL_MM - MOTOR_W_MM/2;
+    var cylLenMm = 12;
+    var cylLen = mm(cylLenMm);
+    var cylH = motH * 0.82; // manopla bem mais grossa — próxima da altura do motor
+
+    var shaftEnd = shaftStart + dir*mm(reachMm);
+    var cylX = dir > 0 ? shaftEnd - cylLen : shaftEnd;
+
+    ctx.strokeStyle = '#9AA1A8'; ctx.lineWidth = Math.max(2, mm(2.2));
+    ctx.beginPath(); ctx.moveTo(shaftStart, shaftY); ctx.lineTo(shaftEnd, shaftY); ctx.stroke();
+
+    // corpo da manopla com sombreamento cilíndrico (mais claro em cima, mais
+    // escuro embaixo) para reforçar a leitura de volume/rotação
+    var cylGrad = ctx.createLinearGradient(0, shaftY-cylH/2, 0, shaftY+cylH/2);
+    cylGrad.addColorStop(0, shade(color, 55));
+    cylGrad.addColorStop(0.5, color);
+    cylGrad.addColorStop(1, shade(color, -55));
+    ctx.fillStyle = cylGrad; ctx.strokeStyle = '#00000066'; ctx.lineWidth = 1;
+    roundRectPath(cylX, shaftY-cylH/2, cylLen, cylH, 5); ctx.fill(); ctx.stroke();
+
+    // furo passante (rolamento/eixo), como na peça de referência
+    var boreX = dir>0 ? cylX+cylLen*0.72 : cylX+cylLen*0.28;
+    ctx.save();
+    ctx.beginPath(); ctx.ellipse(boreX, shaftY, cylH*0.16, cylH*0.34, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#00000090'; ctx.fill();
+    ctx.strokeStyle = shade(color,-70); ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+
+    // --- Duas garras (estilo "castanha" da peça de referência), 180° entre
+    // si, girando com o eixo — é a pista mais clara de que o motor está girando.
+    var angleRad = rotDeg * Math.PI/180;
+    var tipX = dir>0 ? cylX+cylLen : cylX;
+    var tabBaseSize = cylH * 0.22;
+    [0, 180].forEach(function(offsetDeg){
+      var a = angleRad + offsetDeg*Math.PI/180;
+      var tabY = shaftY + Math.sin(a) * (cylH/2 - 1);
+      var depth = Math.cos(a); // >0 = garra na frente, <0 = atrás do eixo
+      var alpha = 0.4 + 0.6 * Math.max(0, depth);
+      var size = tabBaseSize * (0.85 + 0.3*Math.max(0, depth));
+      ctx.save();
+      ctx.translate(tipX + dir*mm(1.5), tabY);
+      ctx.rotate(dir>0 ? 0 : Math.PI);
+      ctx.fillStyle = shadeAlpha(color, depth>0 ? 25 : -20, alpha);
+      ctx.beginPath();
+      ctx.moveTo(0, -size*0.35);
+      ctx.quadraticCurveTo(size, -size*0.55, size, 0);
+      ctx.quadraticCurveTo(size, size*0.55, 0, size*0.35);
+      ctx.quadraticCurveTo(size*0.45, 0, 0, -size*0.35);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+
+    // leitura numérica: ângulo atual e velocidade em RPM, acima do motor
+    ctx.fillStyle = color; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+    var angleLabel = (((rotDeg % 360) + 360) % 360).toFixed(0) + '°';
+    var rpmLabel = (rpm||0).toFixed(1) + ' RPM';
+    ctx.fillText(angleLabel + '  ·  ' + rpmLabel, cx, motY - 8);
+
+    return { tipX: dir>0 ? cylX+cylLen : cylX };
+  }
+
+  function drawFrame(state){
+    fitCanvas();
+    var range = parseFloat(byId('viewRange').value) || 150;
+    var couplingLimit = parseFloat(byId('couplingThreshold').value) || 5;
+    var W = canvas.clientWidth, H = canvas.clientHeight || 260;
+    var padX = 55;
+    var railY = H*0.58, railH = 12;
+    var trackW = W - padX*2;
+
+    ctx.clearRect(0,0,W,H);
+
+    // apoios nas duas pontas (como na bancada real)
+    drawLeg(padX-14, railY-railH/2-2, 46);
+    drawLeg(W-padX+14, railY-railH/2-2, 46);
+
+    // trilho / régua
+    var grad = ctx.createLinearGradient(0,railY-railH/2,0,railY+railH/2);
+    grad.addColorStop(0,'#3A4048'); grad.addColorStop(.5,'#1C2024'); grad.addColorStop(1,'#3A4048');
+    ctx.fillStyle = grad; ctx.fillRect(padX, railY-railH/2, trackW, railH);
+    ctx.strokeStyle = '#0D0F12'; ctx.lineWidth = 2; ctx.strokeRect(padX, railY-railH/2, trackW, railH);
+
+    function xOf(v){ return padX + ((v+range)/(range*2))*trackW; }
+
+    var step = niceStep(range);
+    ctx.font = '9px monospace'; ctx.textAlign = 'center';
+    for(var v = -Math.floor(range/step)*step; v<=range; v+=step){
+      var tx = xOf(v);
+      var isZero = Math.abs(v) < 1e-6;
+      ctx.strokeStyle = isZero ? '#FFC24B' : '#5B636C';
+      ctx.lineWidth = isZero ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(tx, railY-railH/2-4); ctx.lineTo(tx, railY-railH/2); ctx.stroke();
+      ctx.fillStyle = isZero ? '#FFC24B' : '#8B939C';
+      ctx.fillText(v.toFixed(0), tx, railY-railH/2-8);
+    }
+
+    // Posição física dos carros:
+    // Azul: X=0 -> -40 mm; X positivo vai para o centro.
+    // Vermelho: Y=0 -> +40 mm; Y positivo vai para o centro.
+    var bluePhysicalPos = -40 + state.X;
+    var redPhysicalPos  =  40 - state.Y;
+    var pxPerMm = trackW / (range*2);
+
+    // Graus reais por "unidade" de Z/E no G-code = 360 × (passos por unidade,
+    // do M92) ÷ (passos por volta do motor, já com microstepping). O estado
+    // (state.Z/E) guarda o valor cru do G-code; só convertemos para graus
+    // aqui, na hora de desenhar — o resto da simulação (tempo, acoplamento)
+    // não depende disso.
+    var degPerUnit = getDegPerUnit();
+
+    // Cada manopla permanece rigidamente presa ao seu próprio carro.
+    // Não há deslocamento artificial para criar o acoplamento.
+    var tipX = drawCartAssembly(xOf(bluePhysicalPos), railY, state.Z*degPerUnit, (state.rpmZ||0)*degPerUnit, getVar('--cartx'), getVar('--cartx-dim'), true, pxPerMm);
+    var tipY = drawCartAssembly(xOf(redPhysicalPos), railY, state.E*degPerUnit, (state.rpmE||0)*degPerUnit, getVar('--carty'), getVar('--carty-dim'), false, pxPerMm);
+
+    // Distância real entre as PONTAS das manoplas (não entre os carros).
+    // O alcance de cada manopla é calibrado para 40mm, então a ponta azul
+    // fica exatamente em X e a ponta vermelha exatamente em -Y — por isso
+    // elas se tocam de verdade quando X=0 e Y=0.
+    var gap = Math.abs(state.X + state.Y);
+    if(gap <= couplingLimit){
+      var midX = (tipX.tipX + tipY.tipX)/2;
+      var topY = railY - 105;
+      ctx.save();
+      ctx.shadowColor = '#FFC24B'; ctx.shadowBlur = 16;
+      ctx.fillStyle = 'rgba(255,196,75,0.9)';
+      ctx.beginPath(); ctx.arc(midX, topY+18, 4, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#FFC24B'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('ACOPLADO', midX, topY);
+    }
+  }
+  function getVar(name){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function getDegPerUnit(){
+    var stepsPerRev = parseFloat(byId('stepsPerRev').value) || 3200;
+    var m92 = parseFloat(byId('m92StepsPerUnit').value) || 1000;
+    return 360 * m92 / stepsPerRev;
+  }
+  function updateDegPerUnitReadout(){
+    var d = getDegPerUnit();
+    byId('degPerUnitReadout').innerHTML =
+      '<b>' + d.toFixed(2) + '°</b> por unidade de Z/E &nbsp;·&nbsp; 1 volta = ' + (360/d).toFixed(3) + ' unidades';
+  }
+  byId('stepsPerRev').addEventListener('input', updateDegPerUnitReadout);
+  byId('m92StepsPerUnit').addEventListener('input', updateDegPerUnitReadout);
+  updateDegPerUnitReadout();
+
+  // Tenta achar "M92 ... Z<valor> ..." ou "E<valor>" no G-code carregado e
+  // preenche o campo automaticamente — evita ter que copiar isso na mão.
+  function autoDetectM92(text){
+    var lines = text.split('\n');
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i].split(';')[0].trim();
+      if(!/^M92\b/i.test(line)) continue;
+      var tokens = line.split(/\s+/).slice(1);
+      var found = null;
+      tokens.forEach(function(tok){
+        var l = tok[0].toUpperCase(), v = parseFloat(tok.slice(1));
+        if((l==='Z' || l==='E') && !isNaN(v)) found = v;
+      });
+      if(found !== null){
+        byId('m92StepsPerUnit').value = found;
+        updateDegPerUnitReadout();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function interp(timeline, t){
+    if(t<=0){
+      var f0 = timeline[0];
+      return {X:f0.X,Y:f0.Y,Z:f0.Z,E:f0.E,rpmZ:0,rpmE:0};
+    }
+    var last = timeline[timeline.length-1];
+    if(t>=last.t) return {X:last.X,Y:last.Y,Z:last.Z,E:last.E,rpmZ:0,rpmE:0};
+
+    // Busca binária para manter a simulação rápida mesmo com G-code grande.
+    var lo = 0, hi = timeline.length - 1;
+    while(hi - lo > 1){
+      var mid = (lo + hi) >> 1;
+      if(timeline[mid].t <= t) lo = mid;
+      else hi = mid;
+    }
+
+    var a = timeline[lo], b = timeline[hi];
+    var dt = b.t - a.t;
+    var f = (dt===0) ? 1 : (t-a.t)/dt;
+    // Velocidade angular do segmento atual, convertida para RPM
+    // (graus/ms -> graus/min -> voltas/min).
+    var rpmZ = dt>0 ? ((b.Z-a.Z)/dt*60000)/360 : 0;
+    var rpmE = dt>0 ? ((b.E-a.E)/dt*60000)/360 : 0;
+    return {
+      X:a.X+(b.X-a.X)*f,
+      Y:a.Y+(b.Y-a.Y)*f,
+      Z:a.Z+(b.Z-a.Z)*f,
+      E:a.E+(b.E-a.E)*f,
+      rpmZ:rpmZ,
+      rpmE:rpmE
+    };
+  }
+
+  byId('btnSimulate').addEventListener('click', function(){
+    autoDetectM92(gcodeInput.value);
+    simResult = parseGcode(gcodeInput.value);
+    byId('btnPlay').disabled = false;
+    resetAnim();
+    drawFrame(simResult.timeline[0]);
+    var wb = byId('simWarnBox');
+    if(simResult.timeline.length <= 1){
+      wb.textContent = 'Nenhum movimento (G1/G0) reconhecido no G-code fornecido.';
+      wb.classList.add('show');
+    } else { wb.classList.remove('show'); }
+  });
+  function resetAnim(){
+    animPlaying=false;
+    animStart=0;
+    if(simResult) simResult._currentTime=0;
+    byId('btnPlay').textContent='▶ Reproduzir';
+  }
+  byId('btnResetSim').addEventListener('click', function(){
+    resetAnim();
+    drawFrame(simResult ? simResult.timeline[0] : {X:0,Y:0,Z:0,E:0});
+  });
+  byId('btnPlay').addEventListener('click', function(){
+    if(!simResult) return;
+    animPlaying = !animPlaying;
+    byId('btnPlay').textContent = animPlaying ? '⏸ Pausar' : '▶ Reproduzir';
+    if(animPlaying){
+      // Continua a partir do tempo atual da simulação.
+      animStart = performance.now() - (simResult._currentTime || 0);
+      requestAnimationFrame(tick);
+    }
+  });
+  function tick(now){
+    if(!animPlaying || !simResult) return;
+    var elapsed = now - animStart;
+    var simTime = Math.min(elapsed, simResult.totalMs);
+    simResult._currentTime = simTime;
+    var state = interp(simResult.timeline, simTime);
+    drawFrame(state);
+    if(simTime >= simResult.totalMs){
+      resetAnim();
+      simResult._currentTime = simResult.totalMs;
+      drawFrame(simResult.timeline[simResult.timeline.length-1]);
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  fitCanvas();
+  drawFrame({X:0,Y:0,Z:0,E:0});
+
+  // =========================================================
+  // WEB SERIAL — conexão e envio real para a máquina
+  // =========================================================
+  var port=null, writer=null, reader=null, keepReading=false;
+  var okResolver=null, sending=false;
+
+  function log(msg, cls){
+    var box = byId('serialLog');
+    var line = document.createElement('div');
+    if(cls) line.className = cls;
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+  function setStatus(connected){
+    byId('statusDot').classList.toggle('on', connected);
+    byId('statusText').textContent = connected ? 'Conectado' : 'Desconectado';
+    byId('btnConnect').disabled = connected;
+    byId('btnDisconnect').disabled = !connected;
+    byId('btnSend').disabled = !connected;
+    byId('btnSendLine').disabled = !connected;
+  }
+
+  if(!('serial' in navigator)){
+    byId('serialSupportNote').textContent =
+      'Web Serial não disponível neste navegador/contexto. Abra este arquivo .html diretamente no Chrome ou Edge (desktop), fora de um iframe incorporado, para conectar via USB.';
+  } else {
+    byId('serialSupportNote').textContent =
+      'Ao conectar, o navegador vai pedir para você escolher a porta USB da máquina.';
+  }
+
+  byId('btnConnect').addEventListener('click', function(){
+    if(!('serial' in navigator)){ log('Web Serial não suportado neste contexto.', 'sys'); return; }
+    navigator.serial.requestPort().then(function(p){
+      port = p;
+      return port.open({baudRate: parseInt(byId('baudRate').value, 10)});
+    }).then(function(){
+      writer = port.writable.getWriter();
+      keepReading = true;
+      pump();
+      setStatus(true);
+      log('--- conectado ---', 'sys');
+    }).catch(function(e){ log('Erro ao conectar: ' + e.message, 'sys'); });
+  });
+
+  function pump(){
+    var decoder = new TextDecoderStream();
+    var closed = port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
+    var buffer = '';
+    (function readLoop(){
+      if(!keepReading) return;
+      reader.read().then(function(res){
+        if(res.done || !keepReading) return;
+        buffer += res.value;
+        var idx;
+        while((idx = buffer.indexOf('\n')) >= 0){
+          var line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx+1);
+          if(line){
+            log('< ' + line, 'in');
+            if(/ok/i.test(line) && okResolver){ var r = okResolver; okResolver = null; r(); }
+          }
         }
-        let idx = Math.floor(Math.random()*pool_base.length);
-        atual_base = pool_base.splice(idx,1)[0];
-        document.getElementById('formula_base').textContent = atual_base;
-        document.getElementById('resposta_base').value = '';
-        document.getElementById('feedback_base').textContent = '';
+        readLoop();
+      }).catch(function(){});
+    })();
+  }
+
+  byId('btnDisconnect').addEventListener('click', function(){
+    sending = false; keepReading = false;
+    Promise.resolve()
+      .then(function(){ return reader ? reader.cancel().catch(function(){}) : null; })
+      .then(function(){ return writer ? writer.close().catch(function(){}) : null; })
+      .then(function(){ return port ? port.close().catch(function(){}) : null; })
+      .then(function(){ setStatus(false); log('--- desconectado ---', 'sys'); });
+  });
+
+  function sendLine(line){
+    log('> ' + line, 'out');
+    return writer.write(new TextEncoder().encode(line + '\n'));
+  }
+  function waitForOk(timeoutMs){
+    return new Promise(function(resolve){
+      okResolver = resolve;
+      setTimeout(function(){
+        if(okResolver === resolve){
+          okResolver = null;
+          log('--- aviso: sem resposta da máquina dentro do tempo limite (' + timeoutMs + 'ms) — seguindo em frente, mas a sincronização pode ter ficado imprecisa neste ponto ---', 'sys');
+          resolve();
+        }
+      }, timeoutMs);
+    });
+  }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  // Anima a simulação de um estado para o próximo, na mesma velocidade
+  // (durationMs) que foi estimada para aquele comando — usado no modo sem
+  // M400, onde não temos como saber quando o movimento realmente termina.
+  var liveVisual = {X:0,Y:0,Z:0,E:0};
+  function animateSegment(from, to, durationMs){
+    return new Promise(function(resolve){
+      if(durationMs <= 0 || !sending){
+        liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E};
+        drawFrame(liveVisual);
+        resolve();
+        return;
+      }
+      var start = performance.now();
+      var rpmZ = ((to.Z-from.Z)/durationMs*60000)/360;
+      var rpmE = ((to.E-from.E)/durationMs*60000)/360;
+      function frame(now){
+        if(!sending){ liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E}; drawFrame(liveVisual); resolve(); return; }
+        var t = Math.min(1, (now-start)/durationMs);
+        liveVisual = {
+          X: from.X+(to.X-from.X)*t,
+          Y: from.Y+(to.Y-from.Y)*t,
+          Z: from.Z+(to.Z-from.Z)*t,
+          E: from.E+(to.E-from.E)*t,
+          rpmZ: rpmZ, rpmE: rpmE
+        };
+        drawFrame(liveVisual);
+        if(t < 1){ requestAnimationFrame(frame); }
+        else { resolve(); }
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  // Igual à anterior, mas roda EM PARALELO com a confirmação real (M400) em
+  // vez de só começar depois dela — usa a estimativa para guiar a
+  // velocidade, mas nunca completa antes de "donePromise" resolver (segura
+  // em 96% do trajeto até a confirmação real chegar, e então conclui na
+  // hora). Isso evita esperar duas vezes (uma pelo movimento real, outra
+  // pela animação) e evita a tela ficar atrasada em relação à máquina.
+  function animateSegmentUntil(from, to, estimatedMs, donePromise){
+    return new Promise(function(resolve){
+      var start = performance.now();
+      var finished = false;
+      donePromise.then(function(){ finished = true; });
+      var safeMs = estimatedMs > 0 ? estimatedMs : 1;
+      var rpmZ = ((to.Z-from.Z)/safeMs*60000)/360;
+      var rpmE = ((to.E-from.E)/safeMs*60000)/360;
+      function frame(now){
+        if(!sending || finished){
+          liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E};
+          drawFrame(liveVisual);
+          resolve();
+          return;
+        }
+        var t = Math.min((now-start)/safeMs, 0.96);
+        liveVisual = {
+          X: from.X+(to.X-from.X)*t,
+          Y: from.Y+(to.Y-from.Y)*t,
+          Z: from.Z+(to.Z-from.Z)*t,
+          E: from.E+(to.E-from.E)*t,
+          rpmZ: rpmZ, rpmE: rpmE
+        };
+        drawFrame(liveVisual);
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  byId('btnSend').addEventListener('click', function(){
+    if(!writer){ log('Não conectado.', 'sys'); return; }
+    var lines = gcodeInput.value.split('\n');
+    var mode = byId('sendMode').value;
+    var fixedDelay = parseInt(byId('fixedDelay').value, 10) || 0;
+    var sync = byId('syncSim').checked;
+    var useM400 = byId('waitM400').checked;
+    var m400Timeout = parseInt(byId('m400Timeout').value, 10) || 120000;
+    sending = true;
+    byId('btnStop').disabled = false;
+    byId('btnSend').disabled = true;
+
+    var liveState = newGcodeState();
+    if(sync){
+      resetAnim();
+      byId('btnPlay').disabled = true;
+      liveVisual = {X:0,Y:0,Z:0,E:0};
+      drawFrame(liveVisual);
+      log('--- envio sincronizado: a simulação vai acompanhar a máquina em tempo real ---', 'sys');
     }
-}
 
-function verificar(tipo){
-    let resposta, correta, feedbackId;
-    if(tipo==='acido'){
-        resposta = document.getElementById('resposta_acido').value.trim().toLowerCase();
-        correta = acidos[atual_acido].toLowerCase();
-        feedbackId = 'feedback_acido';
-    } else {
-        resposta = document.getElementById('resposta_base').value.trim().toLowerCase();
-        correta = bases[atual_base].toLowerCase();
-        feedbackId = 'feedback_base';
-    }
+    (function run(i){
+      if(!sending || i >= lines.length){
+        sending = false; byId('btnStop').disabled = true; byId('btnSend').disabled = false;
+        if(sync) byId('btnPlay').disabled = false;
+        log('--- envio finalizado ---', 'sys');
+        return;
+      }
+      var raw = lines[i];
+      var line = raw.split(';')[0].trim();
 
-    if(resposta === correta){
-        document.getElementById(feedbackId).textContent = "✅ Correto!";
-    } else {
-        document.getElementById(feedbackId).textContent = "❌ Errado! O correto é: "+(tipo==='acido'?acidos[atual_acido]:bases[atual_base]);
-    }
+      // Calcula o efeito da linha ANTES de mandar (posição/duração
+      // estimadas), usado como estimativa inicial da animação.
+      var step = sync ? stepGcodeLine(raw, liveState) : null;
 
-    setTimeout(()=>novaFormula(tipo),1500);
-}
+      if(!line){ run(i+1); return; }
 
-// Inicializa
-novaFormula('acido');
-novaFormula('base');
+      var fromVisual = liveVisual;
+
+      sendLine(line).then(function(){
+        if(mode !== 'ok'){
+          // Modo de intervalo fixo: não há confirmação da máquina, então só
+          // dá pra usar a duração estimada mesmo.
+          var p2 = sleep(fixedDelay);
+          if(step){ return Promise.all([p2, animateSegment(fromVisual, step.snapshot, step.durationMs)]); }
+          return p2;
+        }
+        // "ok" do Marlin confirma só que o comando ENTROU NA FILA, não que
+        // o movimento terminou fisicamente — por isso, se for uma linha de
+        // movimento e M400 estiver marcado, mandamos M400 e a animação roda
+        // EM PARALELO com a espera da resposta dele (não depois), pra tela
+        // não ficar atrasada em relação à máquina.
+        return waitForOk(8000).then(function(){
+          if(step && useM400){
+            var donePromise = sendLine('M400').then(function(){ return waitForOk(m400Timeout); });
+            return Promise.all([donePromise, animateSegmentUntil(fromVisual, step.snapshot, step.durationMs, donePromise)]);
+          }
+          if(step){ return animateSegment(fromVisual, step.snapshot, step.durationMs); }
+          return null;
+        });
+      }).then(function(){ run(i+1); });
+    })(0);
+  });
+
+  byId('btnStop').addEventListener('click', function(){
+    sending = false;
+    log('--- envio interrompido pelo usuário ---', 'sys');
+  });
+
+  byId('btnSendLine').addEventListener('click', function(){
+    var val = byId('manualLine').value.trim();
+    if(!val || !writer) return;
+    sendLine(val);
+    byId('manualLine').value = '';
+  });
+  byId('manualLine').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ byId('btnSendLine').click(); }
+  });
+
+  updateLineCount();
+})();
 </script>
-
 </body>
 </html>
