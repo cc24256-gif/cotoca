@@ -144,7 +144,7 @@
 
   <!-- CONEXAO E ENVIO -->
   <section class="card">
-    <h2>Conexão com a máquina <span class="sub">Web Serial — Chrome/Edge, aberto localmente (fora de iframe)</span></h2>
+    <h2>Conexão com a máquina <span class="sub">Web Serial / WebUSB — FT232 USB UART</span></h2>
     <div class="row2">
       <div>
         <div class="row">
@@ -666,9 +666,11 @@
   drawFrame({X:0,Y:0,Z:0,E:0});
 
   // =========================================================
-  // WEB SERIAL — conexão e envio real para a máquina
+  // SERIAL — Web Serial (desktop) + WebUSB FT232 (Android)
   // =========================================================
   var port=null, writer=null, reader=null, keepReading=false;
+  var usbDevice=null, usbInterface=null, usbInEndpoint=null, usbOutEndpoint=null;
+  var connectionType=null;
   var okResolver=null, sending=false;
 
   function log(msg, cls){
@@ -679,42 +681,41 @@
     box.appendChild(line);
     box.scrollTop = box.scrollHeight;
   }
+
   function setStatus(connected){
     byId('statusDot').classList.toggle('on', connected);
-    byId('statusText').textContent = connected ? 'Conectado' : 'Desconectado';
+    byId('statusText').textContent = connected
+      ? ('Conectado' + (connectionType === 'ft232' ? ' · FT232/WebUSB' : ' · Web Serial'))
+      : 'Desconectado';
     byId('btnConnect').disabled = connected;
     byId('btnDisconnect').disabled = !connected;
     byId('btnSend').disabled = !connected;
     byId('btnSendLine').disabled = !connected;
   }
 
-  if(!('serial' in navigator)){
-    byId('serialSupportNote').textContent =
-      'Web Serial não disponível neste navegador/contexto. Abra este arquivo .html diretamente no Chrome ou Edge (desktop), fora de um iframe incorporado, para conectar via USB.';
-  } else {
-    byId('serialSupportNote').textContent =
-      'Ao conectar, o navegador vai pedir para você escolher a porta USB da máquina.';
-  }
-
-  byId('btnConnect').addEventListener('click', function(){
-    if(!('serial' in navigator)){ log('Web Serial não suportado neste contexto.', 'sys'); return; }
-    navigator.serial.requestPort().then(function(p){
+  // =========================
+  // Web Serial — desktop
+  // =========================
+  function connectWebSerial(){
+    return navigator.serial.requestPort().then(function(p){
       port = p;
       return port.open({baudRate: parseInt(byId('baudRate').value, 10)});
     }).then(function(){
+      connectionType = 'serial';
       writer = port.writable.getWriter();
       keepReading = true;
-      pump();
+      pumpSerial();
       setStatus(true);
-      log('--- conectado ---', 'sys');
-    }).catch(function(e){ log('Erro ao conectar: ' + e.message, 'sys'); });
-  });
+      log('--- conectado via Web Serial ---', 'sys');
+    });
+  }
 
-  function pump(){
+  function pumpSerial(){
     var decoder = new TextDecoderStream();
-    var closed = port.readable.pipeTo(decoder.writable);
+    port.readable.pipeTo(decoder.writable).catch(function(){});
     reader = decoder.readable.getReader();
     var buffer = '';
+
     (function readLoop(){
       if(!keepReading) return;
       reader.read().then(function(res){
@@ -726,30 +727,294 @@
           buffer = buffer.slice(idx+1);
           if(line){
             log('< ' + line, 'in');
-            if(/ok/i.test(line) && okResolver){ var r = okResolver; okResolver = null; r(); }
+            if(/ok/i.test(line) && okResolver){
+              var r = okResolver;
+              okResolver = null;
+              r();
+            }
           }
         }
         readLoop();
-      }).catch(function(){});
+      }).catch(function(e){
+        if(keepReading) log('Erro na leitura serial: ' + e.message, 'sys');
+      });
     })();
   }
 
+  // =========================
+  // FT232 — WebUSB
+  // =========================
+  // FTDI vendor requests
+  // RESET=0, MODEM_CTRL=1, SET_BAUD=3, SET_DATA=4, LATENCY=9.
+  function ftControlOut(request, value, index){
+    return usbDevice.controlTransferOut({
+      requestType: 'vendor',
+      recipient: 'device',
+      request: request
+    }, value, index);
+  }
+
+  function ftBaudDivisor(baud){
+    // FT232R uses a 3 MHz base clock and 1/8 fractional divisor.
+    var exact = 3000000 / baud;
+    var whole = Math.floor(exact);
+    var frac = Math.round((exact - whole) * 8);
+    if(frac >= 8){ whole++; frac = 0; }
+
+    var div = (whole & 0x3FFF) | ((frac & 7) << 14);
+
+    // FT232 special values.
+    if(baud === 3000000) div = 0x0000;
+    else if(baud === 2000000) div = 0x0001;
+    else if(baud === 1500000) div = 0x0002;
+    else if(baud === 1000000) div = 0x0003;
+
+    return div;
+  }
+
+  function findFT232Endpoints(){
+    if(!usbDevice.configuration){
+      throw new Error('FT232 sem configuração USB ativa.');
+    }
+
+    var interfaces = usbDevice.configuration.interfaces;
+
+    for(var i=0; i<interfaces.length; i++){
+      var intf = interfaces[i];
+
+      for(var j=0; j<intf.alternates.length; j++){
+        var alt = intf.alternates[j];
+        var inEp=null, outEp=null;
+
+        alt.endpoints.forEach(function(ep){
+          if(ep.type === 'bulk' && ep.direction === 'in') inEp = ep;
+          if(ep.type === 'bulk' && ep.direction === 'out') outEp = ep;
+        });
+
+        if(inEp && outEp){
+          usbInterface = intf.interfaceNumber;
+          usbInEndpoint = inEp.endpointNumber;
+          usbOutEndpoint = outEp.endpointNumber;
+          return;
+        }
+      }
+    }
+
+    throw new Error('Não encontrei os endpoints bulk IN/OUT do FT232.');
+  }
+
+  function openFT232(){
+    var baud = parseInt(byId('baudRate').value, 10);
+
+    if(!('usb' in navigator)){
+      return Promise.reject(new Error('WebUSB não está disponível neste Chrome.'));
+    }
+
+    // FTDI/FT232 vendor ID.
+    return navigator.usb.requestDevice({
+      filters: [{vendorId: 0x0403}]
+    }).then(function(device){
+      usbDevice = device;
+
+      log('USB selecionado: ' + (device.productName || 'FT232') +
+          ' · VID 0x' + device.vendorId.toString(16) +
+          ' · PID 0x' + device.productId.toString(16), 'sys');
+
+      return usbDevice.open();
+    }).then(function(){
+      if(!usbDevice.configuration){
+        return usbDevice.selectConfiguration(1);
+      }
+    }).then(function(){
+      findFT232Endpoints();
+      return usbDevice.claimInterface(usbInterface);
+    }).then(function(){
+      return ftControlOut(0, 0, 0);              // reset
+    }).then(function(){
+      return ftControlOut(3, ftBaudDivisor(baud), 0); // baud
+    }).then(function(){
+      return ftControlOut(4, 8, 0);              // 8N1
+    }).then(function(){
+      return ftControlOut(1, 0x0303, 0);         // DTR + RTS
+    }).then(function(){
+      return ftControlOut(0, 0x0003, 0);         // purge RX + TX
+    }).then(function(){
+      return ftControlOut(9, 1, 0);              // low latency
+    }).then(function(){
+      connectionType = 'ft232';
+      keepReading = true;
+
+      writer = {
+        write: function(data){
+          return usbDevice.transferOut(usbOutEndpoint, data).then(function(result){
+            if(result.status !== 'ok'){
+              throw new Error('FT232 transferOut: ' + result.status);
+            }
+          });
+        },
+        close: function(){ return Promise.resolve(); }
+      };
+
+      setStatus(true);
+      log('--- conectado via FT232 / WebUSB ---', 'sys');
+      pumpFT232();
+    });
+  }
+
+  function processFT232Data(data){
+    if(!data || !data.byteLength) return;
+
+    // FTDI places 2 status bytes at the beginning of each bulk-IN packet.
+    var bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    if(bytes.length <= 2) return;
+
+    var payload = bytes.slice(2);
+    var text = new TextDecoder().decode(payload);
+
+    var buffer = processFT232Data._buffer || '';
+    buffer += text;
+
+    var idx;
+    while((idx = buffer.indexOf('\n')) >= 0){
+      var line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx+1);
+
+      if(line){
+        log('< ' + line, 'in');
+
+        if(/ok/i.test(line) && okResolver){
+          var r = okResolver;
+          okResolver = null;
+          r();
+        }
+      }
+    }
+
+    processFT232Data._buffer = buffer;
+  }
+
+  function pumpFT232(){
+    (function loop(){
+      if(!keepReading || !usbDevice) return;
+
+      usbDevice.transferIn(usbInEndpoint, 64).then(function(result){
+        if(!keepReading) return;
+
+        if(result.status === 'ok' && result.data){
+          processFT232Data(result.data);
+        }
+
+        loop();
+      }).catch(function(e){
+        if(keepReading){
+          log('Erro na leitura FT232: ' + e.message, 'sys');
+          keepReading = false;
+        }
+      });
+    })();
+  }
+
+  function closeFT232(){
+    keepReading = false;
+
+    var p = Promise.resolve();
+
+    if(usbDevice && usbInterface !== null){
+      p = usbDevice.releaseInterface(usbInterface).catch(function(){});
+    }
+
+    return p.then(function(){
+      if(usbDevice) return usbDevice.close().catch(function(){});
+    }).then(function(){
+      usbDevice = null;
+      usbInterface = null;
+      usbInEndpoint = null;
+      usbOutEndpoint = null;
+      writer = null;
+    });
+  }
+
+  // =========================
+  // Connect
+  // =========================
+  var isAndroid = /Android/i.test(navigator.userAgent);
+
+  if(!('serial' in navigator) && !('usb' in navigator)){
+    byId('serialSupportNote').textContent =
+      'Web Serial/WebUSB não estão disponíveis neste navegador.';
+  } else if(isAndroid && ('usb' in navigator)){
+    byId('serialSupportNote').textContent =
+      'Android: Conectar usa WebUSB para acessar o FT232. Feche qualquer outro app que esteja usando o FT232.';
+  } else if('serial' in navigator){
+    byId('serialSupportNote').textContent =
+      'Desktop: Conectar usa Web Serial. Android: FT232 usa WebUSB.';
+  }
+
+  byId('btnConnect').addEventListener('click', function(){
+    // No Android, FT232 vai por WebUSB.
+    if(isAndroid && 'usb' in navigator){
+      openFT232().catch(function(e){
+        log('Erro FT232/WebUSB: ' + (e.message || e), 'sys');
+      });
+      return;
+    }
+
+    if('serial' in navigator){
+      connectWebSerial().catch(function(e){
+        log('Web Serial falhou: ' + (e.message || e), 'sys');
+      });
+      return;
+    }
+
+    if('usb' in navigator){
+      openFT232().catch(function(e){
+        log('Erro FT232/WebUSB: ' + (e.message || e), 'sys');
+      });
+      return;
+    }
+
+    log('Nenhuma API USB/Serial disponível neste navegador.', 'sys');
+  });
+
   byId('btnDisconnect').addEventListener('click', function(){
-    sending = false; keepReading = false;
+    sending = false;
+    keepReading = false;
+
+    if(connectionType === 'ft232'){
+      closeFT232().then(function(){
+        connectionType = null;
+        setStatus(false);
+        log('--- desconectado ---', 'sys');
+      });
+      return;
+    }
+
     Promise.resolve()
-      .then(function(){ return reader ? reader.cancel().catch(function(){}) : null; })
-      .then(function(){ return writer ? writer.close().catch(function(){}) : null; })
-      .then(function(){ return port ? port.close().catch(function(){}) : null; })
-      .then(function(){ setStatus(false); log('--- desconectado ---', 'sys'); });
+      .then(function(){
+        return reader ? reader.cancel().catch(function(){}) : null;
+      })
+      .then(function(){
+        return writer ? writer.close().catch(function(){}) : null;
+      })
+      .then(function(){
+        return port ? port.close().catch(function(){}) : null;
+      })
+      .then(function(){
+        port=null; writer=null; reader=null; connectionType=null;
+        setStatus(false);
+        log('--- desconectado ---', 'sys');
+      });
   });
 
   function sendLine(line){
     log('> ' + line, 'out');
     return writer.write(new TextEncoder().encode(line + '\n'));
   }
+
   function waitForOk(timeoutMs){
     return new Promise(function(resolve){
       okResolver = resolve;
+
       setTimeout(function(){
         if(okResolver === resolve){
           okResolver = null;
@@ -759,12 +1024,11 @@
       }, timeoutMs);
     });
   }
+
   function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
-  // Anima a simulação de um estado para o próximo, na mesma velocidade
-  // (durationMs) que foi estimada para aquele comando — usado no modo sem
-  // M400, onde não temos como saber quando o movimento realmente termina.
   var liveVisual = {X:0,Y:0,Z:0,E:0};
+
   function animateSegment(from, to, durationMs){
     return new Promise(function(resolve){
       if(durationMs <= 0 || !sending){
@@ -773,12 +1037,21 @@
         resolve();
         return;
       }
+
       var start = performance.now();
       var rpmZ = ((to.Z-from.Z)/durationMs*60000)/360;
       var rpmE = ((to.E-from.E)/durationMs*60000)/360;
+
       function frame(now){
-        if(!sending){ liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E}; drawFrame(liveVisual); resolve(); return; }
+        if(!sending){
+          liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E};
+          drawFrame(liveVisual);
+          resolve();
+          return;
+        }
+
         var t = Math.min(1, (now-start)/durationMs);
+
         liveVisual = {
           X: from.X+(to.X-from.X)*t,
           Y: from.Y+(to.Y-from.Y)*t,
@@ -786,28 +1059,28 @@
           E: from.E+(to.E-from.E)*t,
           rpmZ: rpmZ, rpmE: rpmE
         };
+
         drawFrame(liveVisual);
-        if(t < 1){ requestAnimationFrame(frame); }
-        else { resolve(); }
+
+        if(t < 1) requestAnimationFrame(frame);
+        else resolve();
       }
+
       requestAnimationFrame(frame);
     });
   }
 
-  // Igual à anterior, mas roda EM PARALELO com a confirmação real (M400) em
-  // vez de só começar depois dela — usa a estimativa para guiar a
-  // velocidade, mas nunca completa antes de "donePromise" resolver (segura
-  // em 96% do trajeto até a confirmação real chegar, e então conclui na
-  // hora). Isso evita esperar duas vezes (uma pelo movimento real, outra
-  // pela animação) e evita a tela ficar atrasada em relação à máquina.
   function animateSegmentUntil(from, to, estimatedMs, donePromise){
     return new Promise(function(resolve){
       var start = performance.now();
       var finished = false;
+
       donePromise.then(function(){ finished = true; });
+
       var safeMs = estimatedMs > 0 ? estimatedMs : 1;
       var rpmZ = ((to.Z-from.Z)/safeMs*60000)/360;
       var rpmE = ((to.E-from.E)/safeMs*60000)/360;
+
       function frame(now){
         if(!sending || finished){
           liveVisual = {X:to.X,Y:to.Y,Z:to.Z,E:to.E};
@@ -815,7 +1088,9 @@
           resolve();
           return;
         }
+
         var t = Math.min((now-start)/safeMs, 0.96);
+
         liveVisual = {
           X: from.X+(to.X-from.X)*t,
           Y: from.Y+(to.Y-from.Y)*t,
@@ -823,26 +1098,31 @@
           E: from.E+(to.E-from.E)*t,
           rpmZ: rpmZ, rpmE: rpmE
         };
+
         drawFrame(liveVisual);
         requestAnimationFrame(frame);
       }
+
       requestAnimationFrame(frame);
     });
   }
 
   byId('btnSend').addEventListener('click', function(){
     if(!writer){ log('Não conectado.', 'sys'); return; }
+
     var lines = gcodeInput.value.split('\n');
     var mode = byId('sendMode').value;
     var fixedDelay = parseInt(byId('fixedDelay').value, 10) || 0;
     var sync = byId('syncSim').checked;
     var useM400 = byId('waitM400').checked;
     var m400Timeout = parseInt(byId('m400Timeout').value, 10) || 120000;
+
     sending = true;
     byId('btnStop').disabled = false;
     byId('btnSend').disabled = true;
 
     var liveState = newGcodeState();
+
     if(sync){
       resetAnim();
       byId('btnPlay').disabled = true;
@@ -853,16 +1133,16 @@
 
     (function run(i){
       if(!sending || i >= lines.length){
-        sending = false; byId('btnStop').disabled = true; byId('btnSend').disabled = false;
+        sending = false;
+        byId('btnStop').disabled = true;
+        byId('btnSend').disabled = false;
         if(sync) byId('btnPlay').disabled = false;
         log('--- envio finalizado ---', 'sys');
         return;
       }
+
       var raw = lines[i];
       var line = raw.split(';')[0].trim();
-
-      // Calcula o efeito da linha ANTES de mandar (posição/duração
-      // estimadas), usado como estimativa inicial da animação.
       var step = sync ? stepGcodeLine(raw, liveState) : null;
 
       if(!line){ run(i+1); return; }
@@ -871,26 +1151,36 @@
 
       sendLine(line).then(function(){
         if(mode !== 'ok'){
-          // Modo de intervalo fixo: não há confirmação da máquina, então só
-          // dá pra usar a duração estimada mesmo.
           var p2 = sleep(fixedDelay);
-          if(step){ return Promise.all([p2, animateSegment(fromVisual, step.snapshot, step.durationMs)]); }
+          if(step){
+            return Promise.all([p2, animateSegment(fromVisual, step.snapshot, step.durationMs)]);
+          }
           return p2;
         }
-        // "ok" do Marlin confirma só que o comando ENTROU NA FILA, não que
-        // o movimento terminou fisicamente — por isso, se for uma linha de
-        // movimento e M400 estiver marcado, mandamos M400 e a animação roda
-        // EM PARALELO com a espera da resposta dele (não depois), pra tela
-        // não ficar atrasada em relação à máquina.
+
         return waitForOk(8000).then(function(){
           if(step && useM400){
-            var donePromise = sendLine('M400').then(function(){ return waitForOk(m400Timeout); });
-            return Promise.all([donePromise, animateSegmentUntil(fromVisual, step.snapshot, step.durationMs, donePromise)]);
+            var donePromise = sendLine('M400').then(function(){
+              return waitForOk(m400Timeout);
+            });
+
+            return Promise.all([
+              donePromise,
+              animateSegmentUntil(fromVisual, step.snapshot, step.durationMs, donePromise)
+            ]);
           }
-          if(step){ return animateSegment(fromVisual, step.snapshot, step.durationMs); }
+
+          if(step) return animateSegment(fromVisual, step.snapshot, step.durationMs);
           return null;
         });
-      }).then(function(){ run(i+1); });
+      }).then(function(){
+        run(i+1);
+      }).catch(function(e){
+        log('Erro durante envio: ' + (e.message || e), 'sys');
+        sending = false;
+        byId('btnStop').disabled = true;
+        byId('btnSend').disabled = false;
+      });
     })(0);
   });
 
@@ -902,11 +1192,16 @@
   byId('btnSendLine').addEventListener('click', function(){
     var val = byId('manualLine').value.trim();
     if(!val || !writer) return;
-    sendLine(val);
+
+    sendLine(val).catch(function(e){
+      log('Erro ao enviar: ' + e.message, 'sys');
+    });
+
     byId('manualLine').value = '';
   });
+
   byId('manualLine').addEventListener('keydown', function(e){
-    if(e.key === 'Enter'){ byId('btnSendLine').click(); }
+    if(e.key === 'Enter') byId('btnSendLine').click();
   });
 
   updateLineCount();
