@@ -122,7 +122,7 @@
       <span class="legend-dot" style="background:var(--cartx)"></span>Carro X — manopla Z (motor rotativo azul)&nbsp;&nbsp;
       <span class="legend-dot" style="background:var(--carty)"></span>Carro Y — manopla E (motor rotativo vermelho)&nbsp;&nbsp;
       <br>Referência: X=0 → azul em -40 mm; Y=0 → vermelho em +40 mm. Movimento positivo aproxima do centro.
-      <br>A manopla gira com duas garras (como na peça de referência) e mostra ângulo + RPM em tempo real acima de cada motor.
+      <br>A manopla gira com duas garras (como na peça de referência) e mostra posição do carro, ângulo e RPM em tempo real, em destaque acima de cada motor.
       <br>A velocidade real do giro depende de "passos por volta" × M92 — ajuste os dois campos acima para bater com a rotação de verdade da máquina.
       <br>Marque "Sincronizar" na seção de Conexão para ver aqui, em tempo real, o que a máquina está executando durante o envio.
     </p>
@@ -371,7 +371,7 @@
   // Todas as peças são definidas em mm e escaladas por pxPerMm — assim o
   // conjunto guarda a proporção real em relação ao trilho (motor NEMA17 ≈
   // 42mm) e não estica nem fica pequeno demais ao redimensionar a janela.
-  function drawCartAssembly(cx, railY, rotDeg, rpm, color, colorDim, pointsRight, pxPerMm){
+  function drawCartAssembly(cx, railY, rotDeg, rpm, color, colorDim, pointsRight, pxPerMm, axisLabel, axisValue){
     var dir = pointsRight ? 1 : -1;
     var mm = function(v){ return v * pxPerMm; };
 
@@ -472,11 +472,37 @@
       ctx.restore();
     });
 
-    // leitura numérica: ângulo atual e velocidade em RPM, acima do motor
-    ctx.fillStyle = color; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+    // Leitura numérica em destaque: posição do carro no trilho, ângulo atual
+    // da manopla e velocidade em RPM — em um cartão bem visível acima do motor.
+    var posLabel = axisLabel + ': ' + (axisValue).toFixed(1) + ' mm';
     var angleLabel = (((rotDeg % 360) + 360) % 360).toFixed(0) + '°';
     var rpmLabel = (rpm||0).toFixed(1) + ' RPM';
-    ctx.fillText(angleLabel + '  ·  ' + rpmLabel, cx, motY - 8);
+    var line2 = angleLabel + '   ·   ' + rpmLabel;
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 17px monospace';
+    var w1 = ctx.measureText(posLabel).width;
+    ctx.font = 'bold 14px monospace';
+    var w2 = ctx.measureText(line2).width;
+    var boxW = Math.max(w1, w2) + 22;
+    var boxH = 46;
+    var boxGap = 10;
+    var boxY = motY - boxGap - boxH;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,12,15,0.9)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    roundRectPath(cx-boxW/2, boxY, boxW, boxH, 7);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 17px monospace';
+    ctx.fillText(posLabel, cx, boxY + 20);
+    ctx.fillStyle = color;
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(line2, cx, boxY + 38);
 
     return { tipX: dir>0 ? cylX+cylLen : cylX };
   }
@@ -532,8 +558,8 @@
 
     // Cada manopla permanece rigidamente presa ao seu próprio carro.
     // Não há deslocamento artificial para criar o acoplamento.
-    var tipX = drawCartAssembly(xOf(bluePhysicalPos), railY, state.Z*degPerUnit, (state.rpmZ||0)*degPerUnit, getVar('--cartx'), getVar('--cartx-dim'), true, pxPerMm);
-    var tipY = drawCartAssembly(xOf(redPhysicalPos), railY, state.E*degPerUnit, (state.rpmE||0)*degPerUnit, getVar('--carty'), getVar('--carty-dim'), false, pxPerMm);
+    var tipX = drawCartAssembly(xOf(bluePhysicalPos), railY, state.Z*degPerUnit, (state.rpmZ||0)*degPerUnit, getVar('--cartx'), getVar('--cartx-dim'), true, pxPerMm, 'X', state.X);
+    var tipY = drawCartAssembly(xOf(redPhysicalPos), railY, state.E*degPerUnit, (state.rpmE||0)*degPerUnit, getVar('--carty'), getVar('--carty-dim'), false, pxPerMm, 'Y', state.Y);
 
     // Distância real entre as PONTAS das manoplas (não entre os carros).
     // O alcance de cada manopla é calibrado para 40mm, então a ponta azul
